@@ -207,6 +207,10 @@ export default class IslandUI {
         if (task === 'reproduce') {
             if (this.assignedHumans.reproduce.length > 0) {
                 this.assignedHumans.reproduce.forEach(human => {
+                    // Stop current task and return home
+                    if (human.currentMoveTween) {
+                        human.currentMoveTween.stop();
+                    }
                     human.stopCurrentTask();
                     human.stopReproducing();
                 });
@@ -216,16 +220,14 @@ export default class IslandUI {
         } else {
             if (this.assignedHumans[task].length > 0) {
                 const human = this.assignedHumans[task].pop();
-                // Force immediate task stop
+                // Force immediate task stop and return home
                 if (human.currentMoveTween) {
                     human.currentMoveTween.stop();
                 }
                 human.stopCurrentTask();
                 
-                // Ensure the human is properly reset
-                human.task = null;
-                human.state = 'idle';
-                human.startRandomMovement();
+                // The human will automatically return home and start random movement
+                // thanks to the updated stopCurrentTask method
                 
                 // Update the UI immediately
                 this.updateAssignmentIndicators();

@@ -7,6 +7,7 @@ export default class UIScene extends Phaser.Scene {
             lumber: 0,
             food: 0
         };
+        this.lastFoodConsumption = 0; // Track last consumption time in seconds
     }
 
     create() {
@@ -78,6 +79,41 @@ export default class UIScene extends Phaser.Scene {
         ).setOrigin(0.5, 0).setDepth(10);
     }
 
+    updateTimer() {
+        this.timeElapsed += 1;
+        const minutes = Math.floor(this.timeElapsed / 60);
+        const seconds = this.timeElapsed % 60;
+        this.timerText.setText(
+            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        );
+
+        // Check for food consumption every minute
+        if (this.timeElapsed > 0 && this.timeElapsed % 60 === 0) {
+            this.consumeFood();
+        }
+    }
+
+    consumeFood() {
+        const totalIslanders = this.resources.islanders;
+        const availableFood = this.resources.food;
+        
+        // Calculate how many islanders can eat
+        const fedIslanders = Math.min(totalIslanders, availableFood);
+        const unfedIslanders = totalIslanders - fedIslanders;
+        
+        // Consume food
+        this.updateResourceDisplay({
+            food: Math.max(0, this.resources.food - fedIslanders)
+        });
+
+        // Log results
+        if (unfedIslanders > 0) {
+            console.log(`Not enough food! ${unfedIslanders} islanders didn't eat.`);
+        } else if (totalIslanders > 0) {
+            console.log(`All ${totalIslanders} islanders have eaten.`);
+        }
+    }
+
     updateResourceDisplay(resources) {
         // Merge provided resources with defaults
         this.resources = {
@@ -91,14 +127,5 @@ export default class UIScene extends Phaser.Scene {
             this.resourceTexts.lumber.setText(`Lumber: ${this.resources.lumber}`);
             this.resourceTexts.food.setText(`Food: ${this.resources.food}`);
         }
-    }
-
-    updateTimer() {
-        this.timeElapsed += 1;
-        const minutes = Math.floor(this.timeElapsed / 60);
-        const seconds = this.timeElapsed % 60;
-        this.timerText.setText(
-            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-        );
     }
 }
