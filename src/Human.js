@@ -240,8 +240,10 @@ export default class Human {
     }
 
     startGatheringFood() {
+        if (this.state !== 'idle') {
+            this.stopCurrentTask();
+        }
         if (this.isReproducing) return; // Don't interrupt reproduction
-        if (this.state !== 'idle') return;
         
         // Find berries on the island
         const berries = this.findBerriesOnIsland();
@@ -279,8 +281,10 @@ export default class Human {
     }
 
     startGatheringWood() {
+        if (this.state !== 'idle') {
+            this.stopCurrentTask();
+        }
         if (this.isReproducing) return; // Don't interrupt reproduction
-        if (this.state !== 'idle') return;
         
         // Find trees on the island
         const tree = this.findTreeOnIsland();
@@ -318,6 +322,9 @@ export default class Human {
     }
 
     moveToPosition(targetX, targetY, onComplete) {
+        // Store the current task's onComplete callback
+        this.currentTaskCallback = onComplete;
+        
         // Calculate distance and duration
         const distance = Phaser.Math.Distance.Between(
             this.human.x, this.human.y,
@@ -329,7 +336,7 @@ export default class Human {
         this.human.play('walk-down-right');
 
         // Create movement tween
-        this.scene.tweens.add({
+        this.currentMoveTween = this.scene.tweens.add({
             targets: this.human,
             x: targetX,
             y: targetY,
@@ -337,7 +344,10 @@ export default class Human {
             ease: 'Linear',
             onComplete: () => {
                 this.human.play('idle-down-right');
-                if (onComplete) onComplete();
+                // Only call the callback if we're still in the same task
+                if (onComplete && this.currentTaskCallback === onComplete) {
+                    onComplete();
+                }
             }
         });
     }
@@ -392,9 +402,30 @@ export default class Human {
             this.moveTimer.remove();
             this.moveTimer = null;
         }
+        
+        // Stop any ongoing tweens
+        if (this.scene && this.scene.tweens) {
+            this.scene.tweens.killTweensOf(this.human);
+        }
+
+        // Clear any pending delayed calls
+        if (this.scene && this.scene.time) {
+            this.scene.time.removeAllEvents(this);
+        }
+        
+        // Reset all states
         this.isReproducing = false;
         this.reproductionPartner = null;
+        this.task = null;
         this.state = 'idle';
+        
+        // Stop any current animation and play idle
+        if (this.human && this.human.anims) {
+            this.human.play('idle-down-right');
+        }
+        
+        // Resume random movement
+        this.startRandomMovement();
     }
 
     startReproducing(partner) {

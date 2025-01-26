@@ -11,19 +11,23 @@ export default class IslandUI {
         this.reproducingIsland = null;
         this.progressBg = null;
         this.reproductionTween = null;
+        
+        // Add task assignment tracking
+        this.assignedHumans = {
+            food: [],
+            lumber: [],
+            reproduce: []
+        };
     }
 
     show(island) {
         if (this.visible) return;
         
         this.selectedIsland = island;
-        const { width, height } = this.scene.cameras.main;
         
         // Create main panel
         const panelWidth = 400;
         const panelHeight = 300;
-        
-        // Position panel directly over the island
         const panelX = this.selectedIsland.centerX;
         const panelY = this.selectedIsland.centerY;
         
@@ -36,35 +40,34 @@ export default class IslandUI {
             0.7
         ).setOrigin(0.5).setDepth(100);
 
-        // Create three buttons
+        // Create buttons with assignment indicators
         const buttonWidth = 120;
         const buttonHeight = 40;
         const buttonSpacing = 20;
         const buttons = [];
         
-        const buttonConfig = {
-            width: buttonWidth,
-            height: buttonHeight,
-            color: 0x333333,
-            labels: ['Gather Food', 'Harvest Lumber', 'Reproduce']
-        };
+        const buttonConfigs = [
+            { label: 'Gather Food', task: 'food' },
+            { label: 'Harvest Lumber', task: 'lumber' },
+            { label: 'Reproduce', task: 'reproduce' }
+        ];
 
         // Position buttons relative to panel center
-        for (let i = 0; i < 3; i++) {
-            const button = this.createButton(
+        for (let i = 0; i < buttonConfigs.length; i++) {
+            const config = buttonConfigs[i];
+            const button = this.createTaskButton(
                 panelX - buttonWidth / 2,
                 panelY - buttonHeight + (i * (buttonHeight + buttonSpacing)),
-                buttonConfig,
-                i,
-                i === 0 ? () => this.startGatheringFood() :
-                i === 1 ? () => this.startGatheringWood() :
-                () => this.toggleReproduction()
+                {
+                    width: buttonWidth,
+                    height: buttonHeight,
+                    color: 0x333333,
+                    label: config.label,
+                    task: config.task
+                }
             );
             buttons.push(button);
         }
-
-        // Keep panel within screen bounds
-        this.keepInBounds(panel, buttons);
 
         this.elements = {
             panel,
@@ -74,40 +77,7 @@ export default class IslandUI {
         this.visible = true;
     }
 
-    keepInBounds(panel, buttons) {
-        const { width, height } = this.scene.cameras.main;
-        const panelBounds = panel.getBounds();
-        
-        // Check top boundary
-        if (panelBounds.top < 0) {
-            const offset = -panelBounds.top;
-            panel.y += offset;
-            buttons.forEach(button => button.y += offset);
-        }
-        
-        // Check left boundary
-        if (panelBounds.left < 0) {
-            const offset = -panelBounds.left;
-            panel.x += offset;
-            buttons.forEach(button => button.x += offset);
-        }
-        
-        // Check right boundary
-        if (panelBounds.right > width) {
-            const offset = width - panelBounds.right;
-            panel.x += offset;
-            buttons.forEach(button => button.x += offset);
-        }
-        
-        // Check bottom boundary
-        if (panelBounds.bottom > height) {
-            const offset = height - panelBounds.bottom;
-            panel.y += offset;
-            buttons.forEach(button => button.y += offset);
-        }
-    }
-
-    createButton(x, y, config, index, onClick) {
+    createTaskButton(x, y, config) {
         const container = this.scene.add.container(x, y).setDepth(100);
         
         // Button background
@@ -124,7 +94,7 @@ export default class IslandUI {
         const text = this.scene.add.text(
             config.width / 2,
             config.height / 2,
-            config.labels[index],
+            config.label,
             {
                 fontFamily: 'Arial',
                 fontSize: '16px',
@@ -132,14 +102,141 @@ export default class IslandUI {
             }
         ).setOrigin(0.5);
 
+        // Assignment indicator area
+        const indicatorWidth = 60;
+        const indicatorBg = this.scene.add.rectangle(
+            config.width + 5,
+            0,
+            indicatorWidth,
+            config.height,
+            0x222222,
+            0.5
+        ).setOrigin(0);
+
+        // Assignment text
+        const assignmentText = this.scene.add.text(
+            config.width + 10,
+            config.height / 2,
+            this.getAssignmentText(config.task),
+            {
+                fontFamily: 'Arial',
+                fontSize: '16px',
+                color: '#ffffff'
+            }
+        ).setOrigin(0, 0.5);
+
         // Make button interactive
         bg.setInteractive()
             .on('pointerover', () => bg.setFillStyle(0x444444))
             .on('pointerout', () => bg.setFillStyle(config.color))
-            .on('pointerdown', onClick);
+            .on('pointerdown', () => this.handleTaskAssignment(config.task));
 
-        container.add([bg, text]);
+        // Make indicator area interactive
+        indicatorBg.setInteractive()
+            .on('pointerover', () => indicatorBg.setFillStyle(0x333333))
+            .on('pointerout', () => indicatorBg.setFillStyle(0x222222))
+            .on('pointerdown', () => this.handleTaskUnassignment(config.task));
+
+        container.add([bg, text, indicatorBg, assignmentText]);
+        
+        // Store reference to assignment text for updates
+        container.assignmentText = assignmentText;
+        container.task = config.task;
+        
         return container;
+    }
+
+    getAssignmentText(task) {
+        const count = this.assignedHumans[task].length;
+        return 'I'.repeat(count);
+    }
+
+    updateAssignmentIndicators() {
+        if (!this.elements) return;
+        
+        this.elements.buttons.forEach(button => {
+            if (button.assignmentText) {
+                button.assignmentText.setText(this.getAssignmentText(button.task));
+            }
+        });
+    }
+
+    handleTaskAssignment(task) {
+        const humanGroup = this.scene.humanGroup;
+        if (!humanGroup || humanGroup.island !== this.selectedIsland) return;
+
+        // Get available humans (not assigned to any task)
+        const availableHumans = humanGroup.humans.filter(human => 
+            !this.isHumanAssigned(human) && human.state === 'idle'
+        );
+
+        console.log('Available humans:', availableHumans.length);
+        if (availableHumans.length === 0) return;
+
+        if (task === 'reproduce') {
+            // Reproduction needs exactly 2 humans
+            if (availableHumans.length >= 2 && this.assignedHumans.reproduce.length === 0) {
+                const [human1, human2] = availableHumans;
+                this.reproducingIsland = this.selectedIsland;
+                this.assignedHumans.reproduce = [human1, human2];
+                this.reproducingHumans = [human1, human2];
+                
+                // Start the reproduction process
+                human1.startReproducing(human2);
+                human2.startReproducing(human1);
+                this.startReproductionCycle();
+            }
+        } else {
+            // For other tasks, assign one human at a time
+            const human = availableHumans[0];
+            this.assignedHumans[task].push(human);
+            
+            if (task === 'food') {
+                human.stopCurrentTask(); // Make sure to stop any current task first
+                human.startGatheringFood();
+            } else if (task === 'lumber') {
+                human.stopCurrentTask(); // Make sure to stop any current task first
+                human.startGatheringWood();
+            }
+        }
+
+        this.updateAssignmentIndicators();
+    }
+
+    handleTaskUnassignment(task) {
+        if (task === 'reproduce') {
+            if (this.assignedHumans.reproduce.length > 0) {
+                this.assignedHumans.reproduce.forEach(human => {
+                    human.stopCurrentTask();
+                    human.stopReproducing();
+                });
+                this.assignedHumans.reproduce = [];
+                this.cleanupReproduction();
+            }
+        } else {
+            if (this.assignedHumans[task].length > 0) {
+                const human = this.assignedHumans[task].pop();
+                // Force immediate task stop
+                if (human.currentMoveTween) {
+                    human.currentMoveTween.stop();
+                }
+                human.stopCurrentTask();
+                
+                // Ensure the human is properly reset
+                human.task = null;
+                human.state = 'idle';
+                human.startRandomMovement();
+                
+                // Update the UI immediately
+                this.updateAssignmentIndicators();
+            }
+        }
+    }
+
+    isHumanAssigned(human) {
+        return Object.values(this.assignedHumans).some(
+            assigned => assigned.includes(human)
+        );
     }
 
     hide() {
@@ -323,7 +420,11 @@ export default class IslandUI {
 
     cleanupReproduction() {
         this.cleanupProgressBar();
+        // Make sure to properly stop reproduction for the humans
         this.reproducingHumans.forEach(human => {
+            if (human.currentMoveTween) {
+                human.currentMoveTween.stop();
+            }
             human.stopCurrentTask();
             human.stopReproducing();
         });
