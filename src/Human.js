@@ -388,7 +388,12 @@ export default class Human {
     }
 
     stopCurrentTask() {
-        this.task = null;
+        if (this.moveTimer) {
+            this.moveTimer.remove();
+            this.moveTimer = null;
+        }
+        this.isReproducing = false;
+        this.reproductionPartner = null;
         this.state = 'idle';
     }
 

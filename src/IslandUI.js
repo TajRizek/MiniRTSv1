@@ -152,7 +152,7 @@ export default class IslandUI {
         }
         
         this.visible = false;
-        if (!this.reproducingHumans.length) {
+        if (this.reproducingHumans.length === 0) {
             this.selectedIsland = null;
         }
     }
@@ -190,8 +190,12 @@ export default class IslandUI {
         if (!humanGroup || humanGroup.island !== this.selectedIsland) return;
 
         if (this.reproducingHumans.length > 0) {
+            console.log('Stopping reproduction');
             // Stop reproduction
-            this.reproducingHumans.forEach(human => human.stopReproducing());
+            this.reproducingHumans.forEach(human => {
+                human.stopCurrentTask();
+                human.stopReproducing();
+            });
             this.reproducingHumans = [];
             
             // Clean up progress bar and background
@@ -210,14 +214,22 @@ export default class IslandUI {
             
             this.reproducingIsland = null;
         } else {
+            console.log('Starting reproduction');
             // Start reproduction if we have at least 2 available humans
             const availableHumans = humanGroup.humans.filter(
                 human => !human.isReproducing && human.state === 'idle'
             );
 
+            console.log('Available humans:', availableHumans.length);
+
             if (availableHumans.length >= 2) {
                 this.reproducingIsland = this.selectedIsland;
                 const [human1, human2] = availableHumans;
+                
+                // Make sure humans are in a clean state before starting
+                human1.stopCurrentTask();
+                human2.stopCurrentTask();
+                
                 this.reproducingHumans = [human1, human2];
                 human1.startReproducing(human2);
                 human2.startReproducing(human1);
@@ -311,6 +323,10 @@ export default class IslandUI {
 
     cleanupReproduction() {
         this.cleanupProgressBar();
+        this.reproducingHumans.forEach(human => {
+            human.stopCurrentTask();
+            human.stopReproducing();
+        });
         this.reproducingHumans = [];
         this.reproducingIsland = null;
     }
