@@ -1,4 +1,5 @@
 import Human from './Human.js';
+import Bridge from './Bridge.js';
 
 export default class IslandUI {
     constructor(scene) {
@@ -16,14 +17,21 @@ export default class IslandUI {
         this.assignedHumans = {
             food: [],
             lumber: [],
-            reproduce: []
+            reproduce: [],
+            bridge: []
         };
+
+        this.bridgeSystem = new Bridge(scene);
     }
 
     show(island) {
         if (this.visible) return;
         
         this.selectedIsland = island;
+        console.log('Selected island:', {
+            x: this.selectedIsland.centerX,
+            y: this.selectedIsland.centerY
+        });
         
         // Create main panel
         const panelWidth = 400;
@@ -49,7 +57,8 @@ export default class IslandUI {
         const buttonConfigs = [
             { label: 'Gather Food', task: 'food' },
             { label: 'Harvest Lumber', task: 'lumber' },
-            { label: 'Reproduce', task: 'reproduce' }
+            { label: 'Reproduce', task: 'reproduce' },
+            { label: 'Build Bridge', task: 'bridge' }
         ];
 
         // Position buttons relative to panel center
@@ -162,6 +171,14 @@ export default class IslandUI {
     }
 
     handleTaskAssignment(task) {
+        console.log('Task assignment requested:', task); // Debug log
+        
+        if (task === 'bridge') {
+            console.log('Starting bridge building task...'); // Debug log
+            this.startBridgeBuilding();
+            return;
+        }
+        
         const humanGroup = this.scene.humanGroup;
         if (!humanGroup || humanGroup.island !== this.selectedIsland) return;
 
@@ -207,10 +224,6 @@ export default class IslandUI {
         if (task === 'reproduce') {
             if (this.assignedHumans.reproduce.length > 0) {
                 this.assignedHumans.reproduce.forEach(human => {
-                    // Stop current task and return home
-                    if (human.currentMoveTween) {
-                        human.currentMoveTween.stop();
-                    }
                     human.stopCurrentTask();
                     human.stopReproducing();
                 });
@@ -220,14 +233,16 @@ export default class IslandUI {
         } else {
             if (this.assignedHumans[task].length > 0) {
                 const human = this.assignedHumans[task].pop();
-                // Force immediate task stop and return home
+                // Force immediate task stop
                 if (human.currentMoveTween) {
                     human.currentMoveTween.stop();
                 }
                 human.stopCurrentTask();
                 
-                // The human will automatically return home and start random movement
-                // thanks to the updated stopCurrentTask method
+                // Ensure the human is properly reset
+                human.task = null;
+                human.state = 'idle';
+                human.startRandomMovement();
                 
                 // Update the UI immediately
                 this.updateAssignmentIndicators();
@@ -432,5 +447,135 @@ export default class IslandUI {
         });
         this.reproducingHumans = [];
         this.reproducingIsland = null;
+    }
+
+    getAvailableHumans() {
+        const humanGroup = this.scene.humanGroup;
+        if (!humanGroup) return [];
+
+        // Get humans that aren't assigned to any task
+        return humanGroup.humans.filter(human => 
+            !this.isHumanAssigned(human) && human.state === 'idle'
+        );
+    }
+
+    startBridgeBuilding() {
+        console.log('Starting bridge building mode...');
+        
+        const currentIsland = this.selectedIsland;
+        
+        const clickHandler = (pointer) => {
+            const humanGroup = this.scene.humanGroup;
+            if (!humanGroup) return;
+
+            const currentIsland = humanGroup.island;
+            if (!currentIsland) return;
+
+            // Find the closest valid target island
+            let closestDistance = Infinity;
+            let targetIsland = null;
+
+            const validConnections = this.bridgeSystem.bridgeConnections[
+                this.scene.placedIslands.indexOf(currentIsland)
+            ] || [];
+
+            validConnections.forEach(connection => {
+                const possibleTarget = this.scene.placedIslands[connection.target];
+                if (!possibleTarget) return;
+                
+                const distance = Phaser.Math.Distance.Between(
+                    pointer.x, pointer.y,
+                    possibleTarget.centerX, possibleTarget.centerY
+                );
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    targetIsland = possibleTarget;
+                }
+            });
+
+            if (targetIsland) {
+                // Stop any existing bridge construction
+                this.bridgeSystem.stopConstruction();
+                
+                // Start new construction
+                const availableHumans = this.getAvailableHumans();
+                if (availableHumans.length > 0) {
+                    const human = availableHumans[0];
+                    this.assignedHumans.bridge.push(human);
+                    this.bridgeSystem.addBuilder(human);
+                    this.bridgeSystem.startConstruction(currentIsland, targetIsland);
+                    this.updateAssignmentIndicators();
+                }
+            }
+        };
+
+        this.scene.input.once('pointerdown', clickHandler);
+        
+        // Show helper text
+        const helpText = this.scene.add.text(
+            this.scene.cameras.main.centerX,
+            50,
+            'Click anywhere to build a bridge to the nearest valid island',
+            {
+                fontSize: '24px',
+                fill: '#ffffff',
+                backgroundColor: '#000000',
+                padding: { x: 10, y: 5 }
+            }
+        ).setOrigin(0.5).setDepth(200);
+        
+        // Remove helper text after 5 seconds
+        this.scene.time.delayedCall(5000, () => {
+            if (helpText) {
+                helpText.destroy();
+            }
+        });
+    }
+
+    toggleAssignment(type) {
+        if (type === 'bridge') {
+            this.startBridgeBuilding();
+            return; // Don't hide UI
+        }
+
+        const currentCount = this.assignedHumans[type].length;
+        const availableHumans = this.getAvailableHumans();
+        console.log('Available humans:', availableHumans.length);
+
+        if (availableHumans.length > 0) {
+            const human = availableHumans[0];
+            
+            // Clear any existing tasks
+            if (human.task) {
+                human.stopCurrentTask();
+            }
+            
+            // Ensure human is in idle state before assigning new task
+            human.state = 'idle';
+            
+            // Assign new task
+            this.assignedHumans[type].push(human);
+            
+            switch (type) {
+                case 'food':
+                    human.startGatheringFood();
+                    break;
+                case 'lumber':
+                    human.startGatheringWood();
+                    break;
+                case 'reproduce':
+                    // Find a partner
+                    const partner = this.findReproductionPartner(human);
+                    if (partner) {
+                        human.startReproducing(partner);
+                        partner.startReproducing(human);
+                    }
+                    break;
+            }
+            
+            this.updateAssignmentIndicators();
+        }
+        // Don't hide UI
     }
 }

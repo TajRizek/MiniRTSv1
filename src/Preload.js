@@ -61,10 +61,24 @@ export function preload(scene) {
             `assets/resources/trees/tree_${variant}.png`
         );
     });
+    scene.load.image("wood1", "assets/resources/trees/wood1.png");
 
     // Load berries
     scene.load.image("berries1", "assets/resources/berries/berries1.png");
+    scene.load.image("strawberry", "assets/resources/berries/strawberry.png");
 
     // Load town house
     scene.load.image("house_A", "assets/house/house1.png");
+
+    // Load bridge variations
+    scene.load.image("bridge_horizontal", "assets/bridge/bridge_horizontal.png");
+    scene.load.image("bridge_horizontal_end_east", "assets/bridge/bridge_horizontal_end_east.png");
+    scene.load.image("bridge_horizontal_end_east_water", "assets/bridge/bridge_horizontal_end_east_water.png");
+    scene.load.image("bridge_horizontal_end_west", "assets/bridge/bridge_horizontal_end_west.png");
+    scene.load.image("bridge_horizontal_end_west_water", "assets/bridge/bridge_horizontal_end_west_water.png");
+    scene.load.image("bridge_vertical", "assets/bridge/bridge_vertical.png");
+    scene.load.image("bridge_vertical_end_north", "assets/bridge/bridge_vertical_end_north.png");
+    scene.load.image("bridge_vertical_end_north_water", "assets/bridge/bridge_vertical_end_north_water.png");
+    scene.load.image("bridge_vertical_end_south", "assets/bridge/bridge_vertical_end_south.png");
+    scene.load.image("bridge_vertical_end_south_water", "assets/bridge/bridge_vertical_end_south_water.png");
 }

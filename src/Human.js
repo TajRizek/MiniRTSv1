@@ -270,6 +270,25 @@ export default class Human {
                         food: this.scene.scene.get('UIScene').resources.food + 1
                     });
                     
+                    // Create floating strawberry effect
+                    const strawberry = this.scene.add.image(
+                        this.house.x,
+                        this.house.y - 20, // Start slightly above house
+                        'strawberry'
+                    ).setScale(2).setDepth(200);
+
+                    // Create tween for floating and fading effect
+                    this.scene.tweens.add({
+                        targets: strawberry,
+                        y: this.house.y - 40, // Float up by 20 pixels
+                        alpha: 0,
+                        duration: 1000,
+                        ease: 'Power1',
+                        onComplete: () => {
+                            strawberry.destroy();
+                        }
+                    });
+                    
                     // Reset state and start again
                     this.state = 'idle';
                     if (this.task === 'gathering_food') {
@@ -311,6 +330,25 @@ export default class Human {
                         lumber: this.scene.scene.get('UIScene').resources.lumber + 1
                     });
                     
+                    // Create floating wood effect
+                    const wood = this.scene.add.image(
+                        this.house.x,
+                        this.house.y - 20, // Start slightly above house
+                        'wood1'
+                    ).setScale(2).setDepth(200);
+
+                    // Create tween for floating and fading effect
+                    this.scene.tweens.add({
+                        targets: wood,
+                        y: this.house.y - 40, // Float up by 20 pixels
+                        alpha: 0,
+                        duration: 1000,
+                        ease: 'Power1',
+                        onComplete: () => {
+                            wood.destroy();
+                        }
+                    });
+                    
                     // Reset state and start again
                     this.state = 'idle';
                     if (this.task === 'gathering_wood') {
@@ -332,8 +370,9 @@ export default class Human {
         );
         const duration = (distance / this.moveSpeed) * 1000;
 
-        // Play walk animation
-        this.human.play('walk-down-right');
+        // Determine direction for animation
+        const direction = targetX > this.human.x ? 'down-right' : 'up-left';
+        this.human.play(`walk-${direction}`);
 
         // Create movement tween
         this.currentMoveTween = this.scene.tweens.add({
@@ -343,7 +382,8 @@ export default class Human {
             duration: duration,
             ease: 'Linear',
             onComplete: () => {
-                this.human.play('idle-down-right');
+                this.human.play(`idle-${direction}`);
+                this.currentMoveTween = null;
                 // Only call the callback if we're still in the same task
                 if (onComplete && this.currentTaskCallback === onComplete) {
                     onComplete();
@@ -459,6 +499,163 @@ export default class Human {
         this.state = 'idle';
         // Resume random movement
         this.startRandomMovement();
+    }
+
+    startBuildingBridge(bridgePath, targetIsland) {
+        if (this.state !== 'idle') {
+            this.stopCurrentTask();
+        }
+        
+        this.state = 'building_bridge';
+        this.bridgePath = bridgePath;
+        this.currentBridgeTile = 0;
+        this.targetIsland = targetIsland;
+        
+        // Start building the first bridge tile
+        this.buildNextBridgeTile();
+    }
+
+    buildNextBridgeTile() {
+        if (!this.bridgePath || this.currentBridgeTile >= this.bridgePath.length) {
+            this.stopBuildingBridge();
+            return;
+        }
+
+        const tile = this.bridgePath[this.currentBridgeTile];
+        const previousTile = this.currentBridgeTile > 0 
+            ? this.bridgePath[this.currentBridgeTile - 1] 
+            : { x: this.human.x, y: this.human.y };
+
+        // Determine direction based on bridge orientation
+        const isHorizontal = tile.type.includes('horizontal');
+        const direction = isHorizontal ? 
+            (tile.x > previousTile.x ? 'right' : 'left') :
+            (tile.y > previousTile.y ? 'down' : 'up');
+        
+        // Set appropriate animation based on direction
+        const animationKey = `walk-${direction === 'down' || direction === 'right' ? 'down-right' : 'up-left'}`;
+        this.human.play(animationKey);
+        
+        // Calculate builder position (one tile back from current construction)
+        const builderPosition = {
+            x: previousTile.x,
+            y: previousTile.y
+        };
+
+        // Set appropriate depth for builders (below UI elements)
+        this.human.setDepth(75); // Above bridges (50) but below UI (100)
+        
+        // Move builder to position with tween
+        if (!this.currentMoveTween) {
+            this.currentMoveTween = this.scene.tweens.add({
+                targets: this.human,
+                x: builderPosition.x,
+                y: builderPosition.y,
+                duration: 1000,
+                ease: 'Linear',
+                onComplete: () => {
+                    this.currentMoveTween = null;
+                    // Keep facing the direction of construction
+                    const idleAnimKey = `idle-${direction === 'down' || direction === 'right' ? 'down-right' : 'up-left'}`;
+                    this.human.play(idleAnimKey);
+                    this.startBuildingCurrentTile(tile);
+                }
+            });
+        } else {
+            this.startBuildingCurrentTile(tile);
+        }
+    }
+
+    startBuildingCurrentTile(tile) {
+        // Create progress bar
+        const progressBarWidth = tile.width * 2;
+        const progressBar = this.scene.add.rectangle(
+            tile.x - (progressBarWidth / 2),
+            tile.y - 20,
+            0,
+            5,
+            0x00FF00
+        ).setOrigin(0, 0.5)
+         .setDepth(100);
+
+        const progressBg = this.scene.add.rectangle(
+            tile.x - (progressBarWidth / 2),
+            tile.y - 20,
+            progressBarWidth,
+            5,
+            0x000000
+        ).setOrigin(0, 0.5)
+         .setDepth(99);
+
+        this.currentProgressBar = progressBar;
+        this.currentProgressBg = progressBg;
+
+        // Animate progress bar
+        this.currentBuildTween = this.scene.tweens.add({
+            targets: progressBar,
+            width: progressBarWidth,
+            duration: 2000, // 2 seconds per tile
+            ease: 'Linear',
+            onComplete: () => {
+                // Clean up progress bars
+                if (progressBar) progressBar.destroy();
+                if (progressBg) progressBg.destroy();
+                this.currentProgressBar = null;
+                this.currentProgressBg = null;
+                this.currentBuildTween = null;
+
+                // Place bridge tile
+                const bridgeTile = this.scene.add.image(tile.x, tile.y, tile.type)
+                    .setScale(2)
+                    .setDepth(50);
+
+                // Deduct wood cost
+                this.scene.scene.get('UIScene').updateResourceDisplay({
+                    lumber: this.scene.scene.get('UIScene').resources.lumber - 2
+                });
+
+                // Move to next tile
+                this.currentBridgeTile++;
+                this.buildNextBridgeTile();
+            }
+        });
+    }
+
+    stopBuildingBridge() {
+        // Clean up any existing progress bars
+        if (this.currentProgressBar) {
+            this.currentProgressBar.destroy();
+            this.currentProgressBar = null;
+        }
+        if (this.currentProgressBg) {
+            this.currentProgressBg.destroy();
+            this.currentProgressBg = null;
+        }
+        if (this.currentBuildTween) {
+            this.currentBuildTween.stop();
+            this.currentBuildTween = null;
+        }
+        if (this.currentMoveTween) {
+            this.currentMoveTween.stop();
+            this.currentMoveTween = null;
+        }
+
+        // Clear all states and tasks
+        this.bridgePath = null;
+        this.currentBridgeTile = 0;
+        this.targetIsland = null;
+        this.state = 'idle';
+        this.task = null;
+        
+        // Return to house and start random movement
+        if (this.scene && this.house) {
+            this.moveToPosition(this.house.x, this.house.y, () => {
+                if (this.human) {
+                    this.human.play('idle-down-right');
+                    this.startRandomMovement();
+                }
+            });
+        }
     }
 
     destroy() {

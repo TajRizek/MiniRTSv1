@@ -6,6 +6,7 @@ import HumanGroup from "./HumanGroup.js";
 import HumanGroup2 from "./HumanGroup2.js";
 import UIScene from './UI.js';
 import IslandUI from './IslandUI.js';
+import Bridge from './Bridge.js';
 
 class LoadingScene extends Phaser.Scene {
     constructor() {
@@ -115,6 +116,9 @@ class GameScene extends Phaser.Scene {
             lumber: 0,
             food: 0
         });
+
+        // Initialize bridge system
+        this.bridgeSystem = new Bridge(this);
     }
 
     updateProgress() {
@@ -202,7 +206,7 @@ class GameScene extends Phaser.Scene {
     }
 
     checkIslandClick(x, y) {
-        // This is a placeholder - implement proper island detection based on your game's needs
+        // Find the clicked island
         return this.placedIslands.find(island => {
             const bounds = {
                 left: island.centerX - 100,
