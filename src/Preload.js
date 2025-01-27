@@ -69,6 +69,7 @@ export function preload(scene) {
 
     // Load town house
     scene.load.image("house_A", "assets/house/house1.png");
+    scene.load.image("heart_C", "assets/house/heart_C.png");
 
     // Load bridge variations
     scene.load.image("bridge_horizontal", "assets/bridge/bridge_horizontal.png");

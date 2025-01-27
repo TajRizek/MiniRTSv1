@@ -1,6 +1,7 @@
 import Human from './Human.js';
 import Bridge from './Bridge.js';
 import Reproduce from './Reproduce.js';
+import HumanStateManager from './HumanStateManager.js';
 
 export default class IslandUI {
     constructor(scene) {
@@ -14,13 +15,8 @@ export default class IslandUI {
         this.progressBg = null;
         this.reproductionTween = null;
         
-        // Add task assignment tracking
-        this.assignedHumans = {
-            food: [],
-            lumber: [],
-            reproduce: [],
-            bridge: []
-        };
+        // Replace the direct assignment tracking with state manager
+        this.stateManager = new HumanStateManager(scene);
 
         this.bridgeSystem = new Bridge(scene);
     }
@@ -158,7 +154,7 @@ export default class IslandUI {
     }
 
     getAssignmentText(task) {
-        const count = this.assignedHumans[task].length;
+        const count = this.stateManager.getAssignmentCount(task);
         return 'I'.repeat(count);
     }
 
@@ -173,10 +169,7 @@ export default class IslandUI {
     }
 
     handleTaskAssignment(task) {
-        console.log('Task assignment requested:', task); // Debug log
-        
         if (task === 'bridge') {
-            console.log('Starting bridge building task...'); // Debug log
             this.startBridgeBuilding();
             return;
         }
@@ -184,78 +177,21 @@ export default class IslandUI {
         const humanGroup = this.scene.humanGroup;
         if (!humanGroup || humanGroup.island !== this.selectedIsland) return;
 
-        // Get available humans (not assigned to any task)
-        const availableHumans = humanGroup.humans.filter(human => 
-            !this.isHumanAssigned(human) && human.state === 'idle'
-        );
-
-        console.log('Available humans:', availableHumans.length);
+        const availableHumans = this.stateManager.getAvailableHumans(humanGroup);
         if (availableHumans.length === 0) return;
 
-        if (task === 'reproduce') {
-            // Reproduction needs exactly 2 humans
-            if (availableHumans.length >= 2 && this.assignedHumans.reproduce.length === 0) {
-                const [human1, human2] = availableHumans;
-                this.reproducingIsland = this.selectedIsland;
-                this.assignedHumans.reproduce = [human1, human2];
-                this.reproducingHumans = [human1, human2];
-                
-                // Start the reproduction process
-                human1.startReproducing(human2);
-                human2.startReproducing(human1);
-                this.startReproductionCycle();
-            }
-        } else {
-            // For other tasks, assign one human at a time
-            const human = availableHumans[0];
-            this.assignedHumans[task].push(human);
-            
-            if (task === 'food') {
-                human.stopCurrentTask(); // Make sure to stop any current task first
-                human.startGatheringFood();
-            } else if (task === 'lumber') {
-                human.stopCurrentTask(); // Make sure to stop any current task first
-                human.startGatheringWood();
-            }
-        }
-
+        const human = availableHumans[0];
+        this.stateManager.assignHuman(human, task);
         this.updateAssignmentIndicators();
     }
 
     handleTaskUnassignment(task) {
-        if (task === 'reproduce') {
-            if (this.assignedHumans.reproduce.length > 0) {
-                this.assignedHumans.reproduce.forEach(human => {
-                    human.stopCurrentTask();
-                    human.stopReproducing();
-                });
-                this.assignedHumans.reproduce = [];
-                this.cleanupReproduction();
-            }
-        } else {
-            if (this.assignedHumans[task].length > 0) {
-                const human = this.assignedHumans[task].pop();
-                // Force immediate task stop
-                if (human.currentMoveTween) {
-                    human.currentMoveTween.stop();
-                }
-                human.stopCurrentTask();
-                
-                // Ensure the human is properly reset
-                human.task = null;
-                human.state = 'idle';
-                human.startRandomMovement();
-                
-                // Update the UI immediately
-                this.updateAssignmentIndicators();
-            }
+        const assigned = this.stateManager.assignedHumans[task];
+        if (assigned.length > 0) {
+            const human = assigned[0];
+            this.stateManager.unassignHuman(human);
+            this.updateAssignmentIndicators();
         }
-    }
-
-    isHumanAssigned(human) {
-        return Object.values(this.assignedHumans).some(
-            assigned => assigned.includes(human)
-        );
     }
 
     hide() {
@@ -313,21 +249,6 @@ export default class IslandUI {
                 human.stopReproducing();
             });
             this.reproducingHumans = [];
-            
-            // Clean up progress bar and background
-            if (this.reproductionProgress) {
-                this.reproductionProgress.destroy();
-                this.reproductionProgress = null;
-            }
-            if (this.progressBg) {
-                this.progressBg.destroy();
-                this.progressBg = null;
-            }
-            if (this.reproductionTween) {
-                this.reproductionTween.stop();
-                this.reproductionTween = null;
-            }
-            
             this.reproducingIsland = null;
         } else {
             console.log('Starting reproduction');
@@ -350,109 +271,12 @@ export default class IslandUI {
                 human1.startReproducing(human2);
                 human2.startReproducing(human1);
 
-                this.startReproductionCycle();
+                // Use Reproduce class to handle the cycle
+                Reproduce.startReproductionCycle(this.scene, this.selectedIsland, [human1, human2]);
             }
         }
 
         this.hide();
-    }
-
-    startReproductionCycle() {
-        // Clean up any existing progress elements
-        if (this.reproductionProgress) {
-            this.reproductionProgress.destroy();
-        }
-        if (this.progressBg) {
-            this.progressBg.destroy();
-        }
-        if (this.reproductionTween) {
-            this.reproductionTween.stop();
-        }
-
-        // Create progress bar
-        const barWidth = 100;
-        const barHeight = 10;
-        const barX = this.reproducingIsland.centerX - barWidth / 2;
-        const barY = this.reproducingIsland.centerY - 50;
-
-        // Background
-        this.progressBg = this.scene.add.rectangle(
-            barX, barY, barWidth, barHeight, 0x000000
-        ).setOrigin(0).setDepth(100);
-
-        // Progress fill
-        this.reproductionProgress = this.scene.add.rectangle(
-            barX, barY, 0, barHeight, 0x00ff00
-        ).setOrigin(0).setDepth(101);
-
-        // Animate progress bar
-        this.reproductionTween = this.scene.tweens.add({
-            targets: this.reproductionProgress,
-            width: barWidth,
-            duration: 10000, // 10 seconds
-            onComplete: () => {
-                if (!this.reproducingIsland || this.reproducingHumans.length === 0) {
-                    // If reproduction was cancelled, just clean up
-                    this.cleanupReproduction();
-                    return;
-                }
-
-                // Create new human using the Reproduce class
-                Reproduce.createNewHuman(
-                    this.scene,
-                    this.reproducingIsland,
-                    this.reproducingIsland.centerX,
-                    this.reproducingIsland.centerY
-                );
-
-                // Clean up current progress bar and start next cycle
-                this.cleanupProgressBar();
-                
-                // Start next cycle if still reproducing
-                if (this.reproducingHumans.length > 0) {
-                    this.startReproductionCycle();
-                }
-            }
-        });
-    }
-
-    cleanupProgressBar() {
-        if (this.progressBg) {
-            this.progressBg.destroy();
-            this.progressBg = null;
-        }
-        if (this.reproductionProgress) {
-            this.reproductionProgress.destroy();
-            this.reproductionProgress = null;
-        }
-        if (this.reproductionTween) {
-            this.reproductionTween.stop();
-            this.reproductionTween = null;
-        }
-    }
-
-    cleanupReproduction() {
-        this.cleanupProgressBar();
-        // Make sure to properly stop reproduction for the humans
-        this.reproducingHumans.forEach(human => {
-            if (human.currentMoveTween) {
-                human.currentMoveTween.stop();
-            }
-            human.stopCurrentTask();
-            human.stopReproducing();
-        });
-        this.reproducingHumans = [];
-        this.reproducingIsland = null;
-    }
-
-    getAvailableHumans() {
-        const humanGroup = this.scene.humanGroup;
-        if (!humanGroup) return [];
-
-        // Get humans that aren't assigned to any task
-        return humanGroup.humans.filter(human => 
-            !this.isHumanAssigned(human) && human.state === 'idle'
-        );
     }
 
     startBridgeBuilding() {
@@ -498,7 +322,7 @@ export default class IslandUI {
                 const availableHumans = this.getAvailableHumans();
                 if (availableHumans.length > 0) {
                     const human = availableHumans[0];
-                    this.assignedHumans.bridge.push(human);
+                    this.stateManager.assignHuman(human, 'bridge');
                     this.bridgeSystem.addBuilder(human);
                     this.bridgeSystem.startConstruction(currentIsland, targetIsland);
                     this.updateAssignmentIndicators();
@@ -516,7 +340,7 @@ export default class IslandUI {
             return; // Don't hide UI
         }
 
-        const currentCount = this.assignedHumans[type].length;
+        const currentCount = this.stateManager.assignedHumans[type].length;
         const availableHumans = this.getAvailableHumans();
         console.log('Available humans:', availableHumans.length);
 
@@ -532,27 +356,20 @@ export default class IslandUI {
             human.state = 'idle';
             
             // Assign new task
-            this.assignedHumans[type].push(human);
-            
-            switch (type) {
-                case 'food':
-                    human.startGatheringFood();
-                    break;
-                case 'lumber':
-                    human.startGatheringWood();
-                    break;
-                case 'reproduce':
-                    // Find a partner
-                    const partner = this.findReproductionPartner(human);
-                    if (partner) {
-                        human.startReproducing(partner);
-                        partner.startReproducing(human);
-                    }
-                    break;
-            }
+            this.stateManager.assignHuman(human, type);
             
             this.updateAssignmentIndicators();
         }
         // Don't hide UI
+    }
+
+    getAvailableHumans() {
+        const humanGroup = this.scene.humanGroup;
+        if (!humanGroup) return [];
+
+        // Get humans that aren't assigned to any task
+        return humanGroup.humans.filter(human => 
+            !this.stateManager.isHumanAssigned(human) && human.state === 'idle'
+        );
     }
 }
