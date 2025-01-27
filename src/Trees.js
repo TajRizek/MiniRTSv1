@@ -2,6 +2,11 @@ export default class Trees {
     static startGathering(human) {
         if (human.state !== 'idle') {
             human.stopCurrentTask();
+            // Add small delay before starting new task to ensure clean state
+            human.scene.time.delayedCall(100, () => {
+                this.startGathering(human);
+            });
+            return;
         }
         if (human.isReproducing) return; // Don't interrupt reproduction
         
@@ -9,6 +14,8 @@ export default class Trees {
         const tree = this.findTreeOnIsland(human);
         if (!tree) {
             console.log('No trees found on this island!');
+            human.state = 'idle';
+            human.task = null;
             return;
         }
 
@@ -51,8 +58,11 @@ export default class Trees {
                     
                     // Reset state and start again
                     human.state = 'idle';
-                    if (human.task === 'gathering_wood') {
-                        this.startGathering(human);
+                    if (human.task === 'gathering_wood' && human.scene) {
+                        // Add small delay before starting next gathering cycle
+                        human.scene.time.delayedCall(100, () => {
+                            this.startGathering(human);
+                        });
                     }
                 });
             });

@@ -62,12 +62,13 @@ export default class IslandUI {
             { label: 'Build Bridge', task: 'bridge' }
         ];
 
-        // Position buttons relative to panel center
+        // Position buttons relative to panel top
+        const startY = panelY - panelHeight/2 + buttonHeight; // Start from top of panel
         for (let i = 0; i < buttonConfigs.length; i++) {
             const config = buttonConfigs[i];
             const button = this.createTaskButton(
                 panelX - buttonWidth / 2,
-                panelY - buttonHeight + (i * (buttonHeight + buttonSpacing)),
+                startY + (i * (buttonHeight + buttonSpacing)),
                 {
                     width: buttonWidth,
                     height: buttonHeight,
@@ -507,25 +508,6 @@ export default class IslandUI {
 
         this.scene.input.once('pointerdown', clickHandler);
         
-        // Show helper text
-        const helpText = this.scene.add.text(
-            this.scene.cameras.main.centerX,
-            50,
-            'Click anywhere to build a bridge to the nearest valid island',
-            {
-                fontSize: '24px',
-                fill: '#ffffff',
-                backgroundColor: '#000000',
-                padding: { x: 10, y: 5 }
-            }
-        ).setOrigin(0.5).setDepth(200);
-        
-        // Remove helper text after 5 seconds
-        this.scene.time.delayedCall(5000, () => {
-            if (helpText) {
-                helpText.destroy();
-            }
-        });
     }
 
     toggleAssignment(type) {

@@ -4,6 +4,7 @@ export default class Bridge {
         this.currentBridgePath = null;
         this.currentBridgeTile = 0;
         this.builders = [];
+        this.isSelectingTarget = false;
         
         // Create a map of valid bridge connections
         this.bridgeConnections = {
@@ -167,23 +168,86 @@ export default class Bridge {
         });
     }
 
+    startBridgeBuilding(sourceIsland, availableHumans) {
+        console.log('Starting bridge building mode...');
+        this.isSelectingTarget = true;
+        
+        const clickHandler = (pointer) => {
+            if (!this.isSelectingTarget) return;
+            this.isSelectingTarget = false;
+
+            // Find the closest valid target island
+            let closestDistance = Infinity;
+            let targetIsland = null;
+
+            const validConnections = this.bridgeConnections[
+                this.scene.placedIslands.indexOf(sourceIsland)
+            ] || [];
+
+            validConnections.forEach(connection => {
+                const possibleTarget = this.scene.placedIslands[connection.target];
+                if (!possibleTarget) return;
+                
+                const distance = Phaser.Math.Distance.Between(
+                    pointer.x, pointer.y,
+                    possibleTarget.centerX, possibleTarget.centerY
+                );
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    targetIsland = possibleTarget;
+                }
+            });
+
+            if (targetIsland) {
+                // Stop any existing bridge construction
+                this.stopConstruction();
+                
+                // Start new construction
+                if (availableHumans.length > 0) {
+                    const human = availableHumans[0];
+                    this.addBuilder(human);
+                    this.startConstruction(sourceIsland, targetIsland);
+                    
+                    // Update UI through callback
+                    if (this.onBuildingStarted) {
+                        this.onBuildingStarted(human);
+                    }
+                }
+            }
+
+            // Clean up the click handler
+            this.scene.input.off('pointerdown', clickHandler);
+        };
+
+        this.scene.input.once('pointerdown', clickHandler);
+    }
+
+    cancelBridgeBuilding() {
+        this.isSelectingTarget = false;
+        this.scene.input.removeAllListeners('pointerdown');
+    }
+
+    setOnBuildingStarted(callback) {
+        this.onBuildingStarted = callback;
+    }
+
+    setOnBuildingComplete(callback) {
+        this.onBuildingComplete = callback;
+    }
+
     stopConstruction() {
         this.builders.forEach(builder => {
             builder.stopBuildingBridge();
             
-            // Find the UI scene and remove builder from assigned list
-            const uiScene = builder.scene.islandUI;
-            if (uiScene && uiScene.assignedHumans.bridge) {
-                const index = uiScene.assignedHumans.bridge.indexOf(builder);
-                if (index !== -1) {
-                    uiScene.assignedHumans.bridge.splice(index, 1);
-                    // Force an immediate UI update
-                    uiScene.updateAssignmentIndicators();
-                }
+            // Notify through callback instead of directly accessing UI
+            if (this.onBuildingComplete) {
+                this.onBuildingComplete(builder);
             }
         });
         this.builders = [];
         this.currentBridgePath = null;
         this.currentBridgeTile = 0;
+        this.isSelectingTarget = false;
     }
 }
