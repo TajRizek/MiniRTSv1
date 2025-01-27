@@ -1,3 +1,7 @@
+import Berries from './Berries.js';
+import Trees from './Trees.js';
+import Reproduce from './Reproduce.js';
+
 export default class Human {
     constructor(scene, island, spawnX, spawnY, tint = 0xFFFFFF) {
         this.scene = scene;
@@ -240,123 +244,11 @@ export default class Human {
     }
 
     startGatheringFood() {
-        if (this.state !== 'idle') {
-            this.stopCurrentTask();
-        }
-        if (this.isReproducing) return; // Don't interrupt reproduction
-        
-        // Find berries on the island
-        const berries = this.findBerriesOnIsland();
-        if (!berries) {
-            console.log('No berries found on this island!');
-            return;
-        }
-
-        this.state = 'moving_to_berries';
-        this.task = 'gathering_food';
-
-        // Move to berries
-        this.moveToPosition(berries.x, berries.y, () => {
-            this.state = 'gathering';
-            
-            // Gather for 2 seconds
-            this.scene.time.delayedCall(2000, () => {
-                this.state = 'moving_to_house';
-                
-                // Move back to house
-                this.moveToPosition(this.house.x, this.house.y, () => {
-                    // Update food counter
-                    this.scene.scene.get('UIScene').updateResourceDisplay({
-                        food: this.scene.scene.get('UIScene').resources.food + 1
-                    });
-                    
-                    // Create floating strawberry effect
-                    const strawberry = this.scene.add.image(
-                        this.house.x,
-                        this.house.y - 20, // Start slightly above house
-                        'strawberry'
-                    ).setScale(2).setDepth(200);
-
-                    // Create tween for floating and fading effect
-                    this.scene.tweens.add({
-                        targets: strawberry,
-                        y: this.house.y - 40, // Float up by 20 pixels
-                        alpha: 0,
-                        duration: 1000,
-                        ease: 'Power1',
-                        onComplete: () => {
-                            strawberry.destroy();
-                        }
-                    });
-                    
-                    // Reset state and start again
-                    this.state = 'idle';
-                    if (this.task === 'gathering_food') {
-                        this.startGatheringFood();
-                    }
-                });
-            });
-        });
+        Berries.startGathering(this);
     }
 
     startGatheringWood() {
-        if (this.state !== 'idle') {
-            this.stopCurrentTask();
-        }
-        if (this.isReproducing) return; // Don't interrupt reproduction
-        
-        // Find trees on the island
-        const tree = this.findTreeOnIsland();
-        if (!tree) {
-            console.log('No trees found on this island!');
-            return;
-        }
-
-        this.state = 'moving_to_tree';
-        this.task = 'gathering_wood';
-
-        // Move to tree
-        this.moveToPosition(tree.x, tree.y, () => {
-            this.state = 'harvesting';
-            
-            // Harvest for 2 seconds
-            this.scene.time.delayedCall(2000, () => {
-                this.state = 'moving_to_house';
-                
-                // Move back to house
-                this.moveToPosition(this.house.x, this.house.y, () => {
-                    // Update lumber counter
-                    this.scene.scene.get('UIScene').updateResourceDisplay({
-                        lumber: this.scene.scene.get('UIScene').resources.lumber + 1
-                    });
-                    
-                    // Create floating wood effect
-                    const wood = this.scene.add.image(
-                        this.house.x,
-                        this.house.y - 20, // Start slightly above house
-                        'wood1'
-                    ).setScale(2).setDepth(200);
-
-                    // Create tween for floating and fading effect
-                    this.scene.tweens.add({
-                        targets: wood,
-                        y: this.house.y - 40, // Float up by 20 pixels
-                        alpha: 0,
-                        duration: 1000,
-                        ease: 'Power1',
-                        onComplete: () => {
-                            wood.destroy();
-                        }
-                    });
-                    
-                    // Reset state and start again
-                    this.state = 'idle';
-                    if (this.task === 'gathering_wood') {
-                        this.startGatheringWood();
-                    }
-                });
-            });
-        });
+        Trees.startGathering(this);
     }
 
     moveToPosition(targetX, targetY, onComplete) {
@@ -392,51 +284,6 @@ export default class Human {
         });
     }
 
-    findBerriesOnIsland() {
-        // Find all berry bushes in the scene
-        const berryBushes = this.scene.children.list.filter(child => 
-            child.texture && child.texture.key === 'berries1'
-        );
-        
-        // Find the berry bush that's closest to this island's center
-        const islandBerries = berryBushes.find(bush => {
-            // Calculate distance from bush to island center
-            const distanceToIslandCenter = Phaser.Math.Distance.Between(
-                bush.x, bush.y,
-                this.island.centerX, this.island.centerY
-            );
-            
-            // Consider the bush to be on this island if it's within a reasonable radius
-            // Adjust this value based on your island size
-            const maxDistance = 150; // pixels
-            return distanceToIslandCenter < maxDistance;
-        });
-        
-        return islandBerries ? { x: islandBerries.x, y: islandBerries.y } : null;
-    }
-
-    findTreeOnIsland() {
-        // Find all trees in the scene
-        const trees = this.scene.children.list.filter(child => 
-            child.texture && child.texture.key.startsWith('tree_')
-        );
-        
-        // Find the tree that's closest to this island's center
-        const islandTree = trees.find(tree => {
-            // Calculate distance from tree to island center
-            const distanceToIslandCenter = Phaser.Math.Distance.Between(
-                tree.x, tree.y,
-                this.island.centerX, this.island.centerY
-            );
-            
-            // Consider the tree to be on this island if it's within a reasonable radius
-            const maxDistance = 150; // pixels
-            return distanceToIslandCenter < maxDistance;
-        });
-        
-        return islandTree ? { x: islandTree.x, y: islandTree.y } : null;
-    }
-
     stopCurrentTask() {
         if (this.moveTimer) {
             this.moveTimer.remove();
@@ -469,36 +316,11 @@ export default class Human {
     }
 
     startReproducing(partner) {
-        if (this.state !== 'idle' || this.isReproducing) return;
-        
-        this.isReproducing = true;
-        this.reproductionPartner = partner;
-        this.state = 'moving_to_house';
-
-        // Move exactly to the house position with a small offset
-        const offset = 10; // Smaller offset
-        const targetX = this.house.x + (this === partner ? offset : -offset);
-        const targetY = this.house.y;
-
-        // Move to reproduction position
-        this.moveToPosition(targetX, targetY, () => {
-            this.state = 'reproducing';
-            // Stop any random movement once in position
-            if (this.moveTimer) {
-                this.moveTimer.remove();
-                this.moveTimer = null;
-            }
-        });
+        Reproduce.startReproducing(this, partner);
     }
 
     stopReproducing() {
-        if (!this.isReproducing) return;
-        
-        this.isReproducing = false;
-        this.reproductionPartner = null;
-        this.state = 'idle';
-        // Resume random movement
-        this.startRandomMovement();
+        Reproduce.stopReproducing(this);
     }
 
     startBuildingBridge(bridgePath, targetIsland) {

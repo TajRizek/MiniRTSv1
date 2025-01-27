@@ -1,5 +1,6 @@
 import Human from './Human.js';
 import Bridge from './Bridge.js';
+import Reproduce from './Reproduce.js';
 
 export default class IslandUI {
     constructor(scene) {
@@ -395,19 +396,13 @@ export default class IslandUI {
                     return;
                 }
 
-                // Create new human
-                const newHuman = new Human(
+                // Create new human using the Reproduce class
+                Reproduce.createNewHuman(
                     this.scene,
                     this.reproducingIsland,
                     this.reproducingIsland.centerX,
                     this.reproducingIsland.centerY
                 );
-                this.scene.humanGroup.humans.push(newHuman);
-
-                // Update UI counter
-                this.scene.scene.get('UIScene').updateResourceDisplay({
-                    islanders: this.scene.scene.get('UIScene').resources.islanders + 1
-                });
 
                 // Clean up current progress bar and start next cycle
                 this.cleanupProgressBar();
